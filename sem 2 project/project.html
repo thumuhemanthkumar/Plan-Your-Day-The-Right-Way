@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LifeRPG: Master Edition</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+<style>
+    :root {
+        --bg: #0f172a;
+        --card: rgba(30, 41, 59, 0.7);
+        --border: rgba(255, 255, 255, 0.08);
+        --primary: #6366f1;
+        --gold: #fbbf24;
+        --rare: #ec4899; /* Pink for Legendary */
+        --uncommon: #8b5cf6; /* Purple for Weekly */
+        --common: #3b82f6; /* Blue for Daily */
+        --text: #f8fafc;
+        --muted: #94a3b8;
+    }
+
+    body {
+        font-family: 'Inter', sans-serif;
+        background: radial-gradient(circle at top center, #1e1b4b, #0f172a);
+        color: var(--text);
+        margin: 0;
+        min-height: 100vh;
+        overflow-x: hidden;
+    }
+
+    /* --- HEADER & HEATMAP --- */
+    header {
+        background: rgba(15, 23, 42, 0.95);
+        backdrop-filter: blur(12px);
+        padding: 20px;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .hud-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        max-width: 700px;
+        margin: 0 auto 15px auto;
+    }
+
+    .level-badge {
+        background: linear-gradient(135deg, var(--primary), #a855f7);
+        padding: 5px 15px;
+        border-radius: 8px;
+        font-weight: 800;
+        font-size: 1rem;
+        box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
+        border: 1px solid rgba(255,255,255,0.2);
+    }
+
+    .xp-bar-container { flex: 1; margin: 0 20px; }
+    .xp-meta { display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 5px; color: var(--muted); }
+    .xp-track { height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; }
+    .xp-fill { height: 100%; background: var(--gold); width: 0%; transition: width 0.6s ease; box-shadow: 0 0 10px var(--gold); }
+
+    /* Heatmap Grid */
+    .heatmap-container {
+        max-width: 700px;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+    .heatmap-title { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+    .heatmap-grid {
+        display: grid;
+        grid-template-columns: repeat(31, 1fr); /* Max 31 days */
+        gap: 4px;
+    }
+    .day-box {
+        aspect-ratio: 1;
+        background: rgba(255,255,255,0.05);
+        border-radius: 3px;
+        position: relative;
+    }
+    .day-box.active-1 { background: rgba(99, 102, 241, 0.4); } /* Little activity */
+    .day-box.active-2 { background: rgba(99, 102, 241, 0.7); } /* Medium */
+    .day-box.active-3 { background: #818cf8; box-shadow: 0 0 5px #818cf8; } /* High activity */
+    .day-box.today { border: 1px solid white; }
+
+    /* --- MAIN LAYOUT --- */
+    .container { max-width: 700px; margin: 30px auto; padding: 0 20px; }
+
+    .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 24px;
+        margin-bottom: 25px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+
+    /* --- INPUTS --- */
+    h3 { margin: 0 0 15px 0; font-size: 1rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+
+    .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+    
+    input, select {
+        background: rgba(0,0,0,0.4);
+        border: 1px solid var(--border);
+        color: white;
+        padding: 12px;
+        border-radius: 10px;
+        width: 100%;
+        font-family: inherit;
+        outline: none;
+        box-sizing: border-box;
+        transition: 0.2s;
+    }
+    input:focus, select:focus { border-color: var(--primary); background: rgba(0,0,0,0.6); }
+
+    /* Rarity Selector */
+    .rarity-selector {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 15px;
+    }
+    .rarity-opt {
+        flex: 1;
+        text-align: center;
+        padding: 10px;
+        border-radius: 10px;
+        background: rgba(255,255,255,0.05);
+        cursor: pointer;
+        font-size: 0.85rem;
+        border: 1px solid transparent;
+        transition: 0.2s;
+        opacity: 0.7;
+    }
+    .rarity-opt:hover { opacity: 1; }
+    .rarity-opt.selected { opacity: 1; border-color: white; transform: scale(1.02); }
+    
+    .r-common { color: var(--common); }
+    .selected.r-common { background: rgba(59, 130, 246, 0.2); }
+    
+    .r-uncommon { color: var(--uncommon); }
+    .selected.r-uncommon { background: rgba(139, 92, 246, 0.2); }
+    
+    .r-rare { color: var(--rare); font-weight: bold; }
+    .selected.r-rare { background: rgba(236, 72, 153, 0.2); box-shadow: 0 0 10px rgba(236, 72, 153, 0.2); }
+
+    button.btn-add {
+        width: 100%;
+        padding: 15px;
+        background: linear-gradient(135deg, var(--primary), #4f46e5);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: 0.2s;
+    }
+    button.btn-add:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(99, 102, 241, 0.4); }
+
+    /* --- TASK LIST --- */
+    ul { list-style: none; padding: 0; }
+    
+    li {
+        background: rgba(255,255,255,0.03);
+        margin-bottom: 12px;
+        padding: 16px;
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        border-left: 4px solid transparent;
+        transition: 0.2s;
+        position: relative;
+    }
+    li:hover { background: rgba(255,255,255,0.06); }
+
+    .checkbox {
+        min-width: 24px;
+        height: 24px;
+        border-radius: 6px;
+        border: 2px solid var(--muted);
+        margin-right: 15px;
+        cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .completed .checkbox { background: var(--gold); border-color: var(--gold); }
+    .completed { opacity: 0.5; }
+    
+    .task-details { flex: 1; }
+    .task-meta { font-size: 0.75rem; display: flex; gap: 10px; margin-top: 4px; opacity: 0.8; }
+    
+    .tag { padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.7rem; text-transform: uppercase; }
+    .tag-Common { background: rgba(59, 130, 246, 0.2); color: var(--common); }
+    .tag-Uncommon { background: rgba(139, 92, 246, 0.2); color: var(--uncommon); }
+    .tag-Legendary { background: rgba(236, 72, 153, 0.2); color: var(--rare); border: 1px solid var(--rare); }
+
+    /* XP Floater */
+    .xp-float {
+        position: fixed;
+        color: var(--gold);
+        font-weight: 900;
+        font-size: 1.5rem;
+        pointer-events: none;
+        animation: floatUp 1.5s ease-out forwards;
+        z-index: 999;
+        text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+    }
+    @keyframes floatUp { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-50px) scale(1.5); } }
+
+</style>
+</head>
+<body>
+
+<header>
+    <div class="hud-top">
+        <div class="level-badge" id="lvl-display">Lvl 1</div>
+        <div class="xp-bar-container">
+            <div class="xp-meta">
+                <span>Experience</span>
+                <span id="xp-text">0 / 100</span>
+            </div>
+            <div class="xp-track"><div class="xp-fill" id="xp-bar"></div></div>
+        </div>
+    </div>
+    
+    <div class="heatmap-container">
+        <div class="heatmap-title">Monthly Consistency</div>
+        <div class="heatmap-grid" id="heatmap"></div>
+    </div>
+</header>
+
+<div class="container">
+
+    <div class="card">
+        <h3>Design New Quest</h3>
+        
+        <input id="t-name" placeholder="Quest Name (e.g., Deep Clean Garage)" style="margin-bottom: 15px;">
+
+        <div class="rarity-selector">
+            <div class="rarity-opt r-common selected" onclick="selectRarity('Common')" id="btn-Common">
+                Common<br><small>Daily (50 XP)</small>
+            </div>
+            <div class="rarity-opt r-uncommon" onclick="selectRarity('Uncommon')" id="btn-Uncommon">
+                Uncommon<br><small>Weekly (150 XP)</small>
+            </div>
+            <div class="rarity-opt r-rare" onclick="selectRarity('Legendary')" id="btn-Legendary">
+                Legendary<br><small>Rare (500 XP)</small>
+            </div>
+        </div>
+
+        <div class="input-grid">
+            <div>
+                <label style="font-size:0.75rem; color:var(--muted)">Deadline Date</label>
+                <input type="date" id="t-date">
+            </div>
+            <div>
+                <label style="font-size:0.75rem; color:var(--muted)">Deadline Time</label>
+                <input type="time" id="t-time" value="12:00">
+            </div>
+        </div>
+
+        <button class="btn-add" onclick="addQuest()">Initialize Quest</button>
+    </div>
+
+    <ul id="list"></ul>
+</div>
+
+<script>
+    // --- STATE ---
+    let player = JSON.parse(localStorage.getItem('rpg_master_user') || '{"lvl":1, "xp":0, "next":200}');
+    let tasks = JSON.parse(localStorage.getItem('rpg_master_tasks') || '[]');
+    let currentRarity = 'Common';
+    let activityLog = JSON.parse(localStorage.getItem('rpg_activity_log') || '{}'); // Format: "YYYY-MM-DD": count
+
+    // --- INIT ---
+    function init() {
+        document.getElementById('t-date').valueAsDate = new Date();
+        renderHUD();
+        renderHeatmap();
+        renderList();
+    }
+
+    // --- RARITY UI ---
+    function selectRarity(type) {
+        currentRarity = type;
+        document.querySelectorAll('.rarity-opt').forEach(el => el.classList.remove('selected'));
+        document.getElementById(`btn-${type}`).classList.add('selected');
+    }
+
+    // --- QUEST LOGIC ---
+    function addQuest() {
+        const name = document.getElementById('t-name').value;
+        const date = document.getElementById('t-date').value;
+        const time = document.getElementById('t-time').value;
+
+        if(!name || !date) return alert("Quest requires a name and date.");
+
+        const task = {
+            id: Date.now(),
+            name,
+            rarity: currentRarity,
+            deadline: `${date}T${time}`,
+            done: false
+        };
+
+        tasks.push(task);
+        save();
+        renderList();
+        document.getElementById('t-name').value = '';
+    }
+
+    function completeQuest(id, e) {
+        const task = tasks.find(t => t.id === id);
+        if(task.done) return;
+
+        task.done = true;
+
+        // 1. Calculate XP based on Rarity
+        let baseXP = 50;
+        if(task.rarity === 'Uncommon') baseXP = 150;
+        if(task.rarity === 'Legendary') baseXP = 500;
+
+        // 2. Time Multiplier
+        const now = new Date();
+        const due = new Date(task.deadline);
+        let multiplier = 1;
+        let msg = "Quest Complete";
+
+        // If completed on a future date (early planning reward) or more than 2h early
+        const diffHours = (due - now) / (1000 * 60 * 60);
+        
+        if (diffHours < 0) {
+            multiplier = 0.5; // Late penalty
+            msg = "Late Completion";
+        } else if (diffHours > 4) {
+            multiplier = 1.5; // Planning Bonus
+            msg = "Speed Bonus!";
+            confetti({ particleCount: 100, spread: 70 });
+        } else {
+            confetti({ particleCount: 30 });
+        }
+
+        const totalXP = Math.floor(baseXP * multiplier);
+        
+        // 3. Update Player
+        player.xp += totalXP;
+        if(player.xp >= player.next) {
+            player.lvl++;
+            player.xp -= player.next;
+            player.next = Math.floor(player.next * 1.4);
+            alert(`LEVEL UP! WELCOME TO LEVEL ${player.lvl}`);
+        }
+
+        // 4. Update Activity Log for Heatmap
+        const today = new Date().toISOString().split('T')[0];
+        activityLog[today] = (activityLog[today] || 0) + 1;
+        
+        // 5. Visuals
+        floatText(e.clientX, e.clientY, `+${totalXP} XP`);
+        save();
+        renderHUD();
+        renderHeatmap();
+        renderList();
+    }
+
+    function deleteQuest(id) {
+        tasks = tasks.filter(t => t.id !== id);
+        save();
+        renderList();
+    }
+
+    // --- RENDERING ---
+    function renderHUD() {
+        document.getElementById('lvl-display').innerText = `Lvl ${player.lvl}`;
+        document.getElementById('xp-text').innerText = `${player.xp} / ${player.next} XP`;
+        const pct = (player.xp / player.next) * 100;
+        document.getElementById('xp-bar').style.width = `${pct}%`;
+    }
+
+    function renderHeatmap() {
+        const grid = document.getElementById('heatmap');
+        grid.innerHTML = '';
+        
+        const date = new Date();
+        const year = date.getFullYear();
+        const month = date.getMonth(); // 0-indexed
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const todayDay = date.getDate();
+
+        for(let i = 1; i <= daysInMonth; i++) {
+            const dayDiv = document.createElement('div');
+            dayDiv.className = 'day-box';
+            
+            // Format date key YYYY-MM-DD
+            const key = `${year}-${String(month+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
+            const count = activityLog[key] || 0;
+
+            if(count > 0) dayDiv.classList.add('active-1');
+            if(count > 2) dayDiv.classList.add('active-2');
+            if(count > 5) dayDiv.classList.add('active-3');
+            
+            if(i === todayDay) dayDiv.classList.add('today');
+
+            // Tooltip (simple title attribute)
+            dayDiv.title = `${key}: ${count} tasks`;
+            
+            grid.appendChild(dayDiv);
+        }
+    }
+
+    function renderList() {
+        const ul = document.getElementById('list');
+        ul.innerHTML = '';
+
+        // Sort: Not done first, then by date
+        tasks.sort((a,b) => (a.done === b.done) ? new Date(a.deadline) - new Date(b.deadline) : a.done ? 1 : -1);
+
+        tasks.forEach(t => {
+            const li = document.createElement('li');
+            if(t.done) li.classList.add('completed');
+            
+            // Color code border
+            let color = 'var(--common)';
+            if(t.rarity === 'Uncommon') color = 'var(--uncommon)';
+            if(t.rarity === 'Legendary') color = 'var(--rare)';
+            li.style.borderLeftColor = color;
+
+            // Date Display Logic
+            const due = new Date(t.deadline);
+            const now = new Date();
+            let timeStr = due.toLocaleDateString() + ' ' + due.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+            
+            // Calculate status
+            let timeColor = 'var(--muted)';
+            if(!t.done && due < now) {
+                timeStr = "OVERDUE";
+                timeColor = "#ef4444";
+            } else if (!t.done && due.getDate() > now.getDate()) {
+                timeStr = `Scheduled: ${due.toLocaleDateString()}`;
+                timeColor = "#3b82f6"; // Blue for future
+            }
+
+            li.innerHTML = `
+                <div class="checkbox" onclick="completeQuest(${t.id}, event)">${t.done ? '✓' : ''}</div>
+                <div class="task-details">
+                    <div style="font-weight:600">${t.name}</div>
+                    <div class="task-meta">
+                        <span class="tag tag-${t.rarity}">${t.rarity}</span>
+                        <span style="color:${timeColor}">📅 ${timeStr}</span>
+                    </div>
+                </div>
+                <button onclick="deleteQuest(${t.id})" style="background:none;border:none;color:#475569;cursor:pointer">✕</button>
+            `;
+            ul.appendChild(li);
+        });
+    }
+
+    function floatText(x, y, txt) {
+        const el = document.createElement('div');
+        el.className = 'xp-float';
+        el.innerText = txt;
+        el.style.left = x + 'px';
+        el.style.top = y + 'px';
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 1500);
+    }
+
+    function save() {
+        localStorage.setItem('rpg_master_user', JSON.stringify(player));
+        localStorage.setItem('rpg_master_tasks', JSON.stringify(tasks));
+        localStorage.setItem('rpg_activity_log', JSON.stringify(activityLog));
+    }
+
+    init();
+</script>
+</body>
+</html>
